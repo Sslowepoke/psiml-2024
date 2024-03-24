@@ -4,36 +4,26 @@ from datetime import datetime
 
 
 def traverse_dir(path):
-    # jos ukletije
-    if not hasattr(traverse_dir, "file_count"):
-        traverse_dir.file_count = 0
+    file_count = 0
+    error_count = 0
+    line_count = 0
+    words = dict()
 
-    if not hasattr(traverse_dir, "error_count"):
-        traverse_dir.error_count = 0
-    
-    if not hasattr(traverse_dir, "words"):
-        traverse_dir.words = dict()
-
-    with os.scandir(path) as it:
-        for entry in it:
-            # ako je .logtxt fajl 
-            if entry.is_file() and entry.name.endswith('.logtxt'):
-                # poziv neki
-                traverse_dir.file_count += 1
-                # print(entry.name)
-                has_error = process_file(entry, traverse_dir.words)
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if name.endswith('.logtxt'):
+                file_count += 1
+                has_error, temp_line_count = process_file(os.path.join(root, name), words)
+                line_count += temp_line_count
                 if has_error:
-                    traverse_dir.error_count += 1
+                    error_count += 1 
 
-            # ako je dir rekurzivni poziv
-            if entry.is_dir():
-                traverse_dir(entry)
-    
-    
+    return file_count, line_count, error_count, words
 
 
 def process_file(path, words):
     has_error = False
+    line_count = 0
     
     with open(path, 'r') as file:
         for line in file:
@@ -41,8 +31,9 @@ def process_file(path, words):
             if not line.strip():
                 continue
             date, level, service, msg = process_line(line)
+            line_count += 1
 
-            if level.lower() == 'error':
+            if 'error' in level.lower() or 'err' in level.lower():
                 has_error = True
             
             # with open('log.txt', 'a') as log:
@@ -50,32 +41,23 @@ def process_file(path, words):
 
             # print(msg)
             new_words = msg.split()
-            # mask = re.compile(r'((\b\w+\b)+)')
-            # match = mask.match(msg)
-            # new_words = match.groups()
-            # print(new_words)
             unique_words = dict()
             for word in new_words:
                 # print(word)
                 word = word.strip(';.,')
                 if word not in unique_words:
                     unique_words[word] = 1
+
             for word in unique_words:
                 if word in words:
                     words[word] += 1
                 else:
                     words[word] = 1
 
-    return has_error
+    return has_error, line_count
 
 def process_line(line):
-    # jos ukletije
-    if not hasattr(process_line, "line_count"):
-        process_line.line_count = 0
-        
-    process_line.line_count += 1
     date, new_line = get_datetime(line)
-
     
     # 25.02.2024.10h:59m:36s information PixelPerfectDesign --- API rate limit exceeded
     exp_1 = re.compile(r"([\w -]+) (\w+) --- (.+)")
@@ -136,7 +118,8 @@ def get_datetime(line):
         (_, year, month, day, hours, minutes, seconds) = match_year_first.groups()
         new_line = line[match_year_first.end():] 
     else:
-        raise Exception('no match in line:'+line)
+        # raise Exception('no match in line:'+line)
+        return None
 
     date = datetime(year=int(year), month=int(month), day=int(day), hour=int(hours), minute=int(minutes), second=int(seconds))
     # print(date)
@@ -145,18 +128,17 @@ def get_datetime(line):
 def main():
     path = input()
 
-    traverse_dir(path)
-    print(traverse_dir.file_count)
-    print(process_line.line_count)
-    print(traverse_dir.error_count)
+    # with open('log.txt', 'w') as log:
+        # log.write('')
+
+
+    file_count, line_count, error_count, words = traverse_dir(path)
+    print(file_count)
+    print(line_count)
+    print(error_count)
+    sorted_words = sorted(words.items(), key=lambda x: (-x[1], x[0])) 
     
-    # if len(traverse_dir.words) <= 5:
-    # sorted_words = dict(sorted(traverse_dir.words.items()))
-    # word_list =  sorted(sorted_words, key = sorted_words.get, reverse=True)
-    # print(sorted_words)
-    # print(word_list)
-    sorted_words = sorted(traverse_dir.words.items(), key=lambda x: (-x[1], x[0]))  
-    # for x in sorted(traverse_dir.words.items(), key=lambda x: (-x[1], x[0])):
+    # for x in sorted(words.items(), key=lambda x: (-x[1], x[0])):
         # print (x[0], x[1])
     
     words_for_print = []
@@ -164,11 +146,6 @@ def main():
         words_for_print.append(x[0])
 
     print(*words_for_print[0:5], sep=', ')
-
-    # if len(sorted_words) < 5:
-    #     print(*(sorted_words[:][0]), sep=', ')
-    # else:
-    #     print(*(sorted_words[0][0:5]), sep=', ')
 
 if __name__ == "__main__":
     main()
